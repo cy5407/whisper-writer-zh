@@ -84,11 +84,21 @@ class InputSimulator:
             time.sleep(interval)
 
     def _typewrite_clipboard(self, text):
-        """Paste via clipboard + Ctrl+V to bypass IME interception (Bopomofo/Pinyin etc.).
-        Saves and restores existing text-clipboard content; binary clipboard data
-        (images/files) is lost during the brief paste window."""
+        """Paste via clipboard to bypass IME interception (Bopomofo/Pinyin etc.).
+        Hotkey is configurable: Ctrl+V (most apps), Ctrl+Shift+V (terminals like
+        WezTerm), or 'none' (just leave text in clipboard, user pastes manually)."""
         import pyperclip
         from utils import ConfigManager
+        hotkey = ConfigManager.get_config_value('post_processing', 'clipboard_paste_hotkey') or 'ctrl_v'
+
+        if hotkey == 'none':
+            # Clipboard-only: don't auto-paste, don't restore. User pastes themselves.
+            try:
+                pyperclip.copy(text)
+            except Exception as e:
+                ConfigManager.console_print(f'[clipboard] copy failed: {type(e).__name__}: {e}')
+            return
+
         try:
             saved = pyperclip.paste()
         except Exception as e:
@@ -97,7 +107,7 @@ class InputSimulator:
         try:
             pyperclip.copy(text)
             time.sleep(0.1)
-            self._send_ctrl_v_win32()
+            self._send_paste_hotkey_win32(shift=(hotkey == 'ctrl_shift_v'))
             time.sleep(0.2)
         except Exception as e:
             ConfigManager.console_print(f'[clipboard] paste failed: {type(e).__name__}: {e}')
@@ -109,8 +119,8 @@ class InputSimulator:
                     ConfigManager.console_print(f'[clipboard] restore failed: {type(e).__name__}: {e}')
 
     @staticmethod
-    def _send_ctrl_v_win32():
-        """Send Ctrl+V via SendInput with VK_LCONTROL.
+    def _send_paste_hotkey_win32(shift=False):
+        """Send Ctrl+V (or Ctrl+Shift+V) via SendInput with VK_LCONTROL.
 
         Why not keybd_event(VK_CONTROL=0x11):
             VK_CONTROL is the abstract code; Windows tracks modifier state by
@@ -127,6 +137,7 @@ class InputSimulator:
         from ctypes import wintypes
 
         VK_LCONTROL = 0xA2
+        VK_LSHIFT = 0xA0
         VK_V = 0x56
         INPUT_KEYBOARD = 1
         KEYEVENTF_KEYUP = 0x0002
@@ -183,16 +194,19 @@ class InputSimulator:
             inp.ki.dwExtraInfo = 0
             return inp
 
-        events = (INPUT * 4)(
-            make(VK_LCONTROL, 0),
-            make(VK_V, 0),
-            make(VK_V, KEYEVENTF_KEYUP),
-            make(VK_LCONTROL, KEYEVENTF_KEYUP),
-        )
-        sent = ctypes.windll.user32.SendInput(4, ctypes.byref(events), ctypes.sizeof(INPUT))
-        if sent != 4:
+        seq = [(VK_LCONTROL, 0)]
+        if shift:
+            seq.append((VK_LSHIFT, 0))
+        seq.extend([(VK_V, 0), (VK_V, KEYEVENTF_KEYUP)])
+        if shift:
+            seq.append((VK_LSHIFT, KEYEVENTF_KEYUP))
+        seq.append((VK_LCONTROL, KEYEVENTF_KEYUP))
+
+        events = (INPUT * len(seq))(*[make(vk, fl) for vk, fl in seq])
+        sent = ctypes.windll.user32.SendInput(len(seq), ctypes.byref(events), ctypes.sizeof(INPUT))
+        if sent != len(seq):
             err = ctypes.windll.kernel32.GetLastError()
-            raise OSError(f'SendInput injected only {sent}/4 events (GetLastError={err})')
+            raise OSError(f'SendInput injected only {sent}/{len(seq)} events (GetLastError={err})')
 
     def _typewrite_ydotool(self, text, interval):
         """

@@ -151,6 +151,14 @@ post_processing:
       - clipboard
       - ydotool
       - dotool
+  clipboard_paste_hotkey:
+    value: ctrl_v
+    type: str
+    description: "When input_method=clipboard, which hotkey to send after copying. ctrl_v = most apps. ctrl_shift_v = WezTerm and most terminal emulators. none = leave text in clipboard, do NOT auto-paste, do NOT restore previous clipboard (you press paste yourself in the right place)."
+    options:
+      - ctrl_v
+      - ctrl_shift_v
+      - none
   llm_polish_enabled:
     value: false
     type: bool
