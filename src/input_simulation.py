@@ -85,25 +85,43 @@ class InputSimulator:
 
     def _typewrite_clipboard(self, text):
         """Paste via clipboard + Ctrl+V to bypass IME interception (Bopomofo/Pinyin etc.).
-        Saves and restores existing text-clipboard content; binary clipboard data is lost."""
+        Uses Win32 keybd_event for the Ctrl+V keystroke — pynput's simulated Ctrl+V
+        was being eaten by the IME on Windows. Saves and restores existing text
+        clipboard content; binary clipboard data (images/files) is lost."""
         import pyperclip
+        from utils import ConfigManager
         try:
             saved = pyperclip.paste()
-        except Exception:
-            saved = ''
+        except Exception as e:
+            ConfigManager.console_print(f'[clipboard] save failed: {type(e).__name__}: {e}')
+            saved = None
         try:
             pyperclip.copy(text)
-            time.sleep(0.05)
-            self.keyboard.press(PynputKey.ctrl)
-            self.keyboard.press('v')
-            self.keyboard.release('v')
-            self.keyboard.release(PynputKey.ctrl)
             time.sleep(0.1)
+            self._send_ctrl_v_win32()
+            time.sleep(0.2)
+        except Exception as e:
+            ConfigManager.console_print(f'[clipboard] paste failed: {type(e).__name__}: {e}')
         finally:
-            try:
-                pyperclip.copy(saved)
-            except Exception:
-                pass
+            if saved is not None:
+                try:
+                    pyperclip.copy(saved)
+                except Exception as e:
+                    ConfigManager.console_print(f'[clipboard] restore failed: {type(e).__name__}: {e}')
+
+    @staticmethod
+    def _send_ctrl_v_win32():
+        """Send Ctrl+V via Win32 keybd_event. Bypasses IME's character-level interception
+        because we're injecting raw scancode events at the keyboard driver layer."""
+        import ctypes
+        VK_CONTROL = 0x11
+        VK_V = 0x56
+        KEYEVENTF_KEYUP = 0x0002
+        user32 = ctypes.windll.user32
+        user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        user32.keybd_event(VK_V, 0, 0, 0)
+        user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
 
     def _typewrite_ydotool(self, text, interval):
         """
