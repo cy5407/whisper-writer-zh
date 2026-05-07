@@ -87,26 +87,49 @@ class InputSimulator:
         """Paste via clipboard + Ctrl+V to bypass IME interception (Bopomofo/Pinyin etc.).
         Saves and restores existing text-clipboard content; binary clipboard data
         (images/files) is lost during the brief paste window."""
+        import os
         import pyperclip
-        from utils import ConfigManager
+
+        # Independent debug log: written and fsync'd directly, bypasses the
+        # stdout redirection that launch.bat sets up (pythonw + redirect buffers).
+        debug_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  'logs', 'clipboard_debug.log')
+        try:
+            os.makedirs(os.path.dirname(debug_path), exist_ok=True)
+            dlog = open(debug_path, 'a', encoding='utf-8')
+        except Exception:
+            dlog = None
+        def log(msg):
+            if dlog is not None:
+                dlog.write(f'[{time.strftime("%H:%M:%S")}] {msg}\n')
+                dlog.flush()
+
+        log(f'enter, text len={len(text)} preview={text[:40]!r}')
         try:
             saved = pyperclip.paste()
+            log(f'saved old clipboard, len={len(saved)}')
         except Exception as e:
-            ConfigManager.console_print(f'[clipboard] save failed: {type(e).__name__}: {e}')
+            log(f'save failed: {type(e).__name__}: {e}')
             saved = None
         try:
             pyperclip.copy(text)
             time.sleep(0.1)
+            verify = pyperclip.paste()
+            log(f'after copy, clipboard len={len(verify)} match={verify == text}')
             self._send_ctrl_v_win32()
+            log('SendInput returned')
             time.sleep(0.2)
         except Exception as e:
-            ConfigManager.console_print(f'[clipboard] paste failed: {type(e).__name__}: {e}')
+            log(f'paste failed: {type(e).__name__}: {e}')
         finally:
             if saved is not None:
                 try:
                     pyperclip.copy(saved)
+                    log('restored old clipboard')
                 except Exception as e:
-                    ConfigManager.console_print(f'[clipboard] restore failed: {type(e).__name__}: {e}')
+                    log(f'restore failed: {type(e).__name__}: {e}')
+            if dlog is not None:
+                dlog.close()
 
     @staticmethod
     def _send_ctrl_v_win32():
@@ -165,7 +188,10 @@ class InputSimulator:
             make(VK_V, KEYEVENTF_KEYUP),
             make(VK_LCONTROL, KEYEVENTF_KEYUP),
         )
-        ctypes.windll.user32.SendInput(4, ctypes.byref(events), ctypes.sizeof(INPUT))
+        sent = ctypes.windll.user32.SendInput(4, ctypes.byref(events), ctypes.sizeof(INPUT))
+        if sent != 4:
+            err = ctypes.windll.kernel32.GetLastError()
+            raise OSError(f'SendInput injected only {sent}/4 events (GetLastError={err})')
 
     def _typewrite_ydotool(self, text, interval):
         """
