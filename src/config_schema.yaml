@@ -169,6 +169,14 @@ post_processing:
     value: 5.0
     type: float
     description: "Seconds to wait for LLM polish before falling back to raw Whisper output."
+  anthropic_api_key:
+    value: null
+    type: str
+    description: "Anthropic API key. Saved to .env as ANTHROPIC_API_KEY; not stored in config.yaml. Required when llm_provider=anthropic."
+  debug_transcript_logging:
+    value: false
+    type: bool
+    description: "Log full transcript and LLM polish before/after text. Off by default; spoken content may include PII."
 
 # Miscellaneous settings
 misc:

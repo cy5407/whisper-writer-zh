@@ -1,34 +1,9 @@
 """Verify Whisper inference (not just model load) works on this machine."""
-import os, sys, glob
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-# Replicate run.py CUDA DLL setup
-import nvidia, ctypes
-bin_dirs = []
-for nvidia_root in nvidia.__path__:
-    bin_dirs.extend(sorted(glob.glob(os.path.join(nvidia_root, '*', 'bin'))))
-_handles = []
-_libs = []
-for d in bin_dirs:
-    _handles.append(os.add_dll_directory(d))
-    os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
-seen = set()
-for _ in range(4):
-    progress = False
-    for d in bin_dirs:
-        for p in glob.glob(os.path.join(d, '*.dll')):
-            if p in seen:
-                continue
-            try:
-                _libs.append(ctypes.WinDLL(p))
-                seen.add(p)
-                progress = True
-            except OSError:
-                pass
-    if not progress:
-        break
-
-print(f'Pre-loaded {len(_libs)} DLLs from {len(bin_dirs)} bin dirs')
-print(f'  bin_dirs: {bin_dirs}')
+from bootstrap_cuda import setup_cuda_dlls
+setup_cuda_dlls()
 
 import numpy as np
 from faster_whisper import WhisperModel

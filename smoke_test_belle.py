@@ -1,28 +1,43 @@
-"""Verify BELLE Chinese Whisper model loads and runs inference."""
-import os, sys, glob, ctypes
-import nvidia
-bin_dirs = []
-for r in nvidia.__path__:
-    bin_dirs.extend(sorted(glob.glob(os.path.join(r, '*', 'bin'))))
-_h, _l = [], []
-for d in bin_dirs:
-    _h.append(os.add_dll_directory(d))
-    os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
-seen = set()
-for _ in range(4):
-    progress = False
-    for d in bin_dirs:
-        for p in glob.glob(os.path.join(d, '*.dll')):
-            if p in seen: continue
-            try: _l.append(ctypes.WinDLL(p)); seen.add(p); progress = True
-            except OSError: pass
-    if not progress: break
+"""Verify a local Chinese-tuned Whisper model (e.g. BELLE-zh) loads and runs.
+
+Resolution order for the model path:
+  1. CLI arg:  python smoke_test_belle.py <model_path>
+  2. env var:  BELLE_MODEL_PATH=...
+  3. config:   model_options.local.model_path in src/config.yaml
+"""
+import os, sys, argparse
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from bootstrap_cuda import setup_cuda_dlls
+setup_cuda_dlls()
+
+
+def resolve_model_path():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('model_path', nargs='?', default=None)
+    args = parser.parse_args()
+    if args.model_path:
+        return args.model_path
+    env = os.environ.get('BELLE_MODEL_PATH')
+    if env:
+        return env
+    try:
+        from utils import ConfigManager
+        ConfigManager.initialize()
+        return ConfigManager.get_config_value('model_options', 'local', 'model_path')
+    except Exception:
+        return None
+
+
+path = resolve_model_path()
+if not path:
+    sys.exit('No model path provided. Pass as CLI arg, set BELLE_MODEL_PATH, or '
+             'configure model_options.local.model_path in src/config.yaml.')
 
 import numpy as np
 from faster_whisper import WhisperModel
 
-path = r'C:\Users\cy5407\whisper-writer\models\belle-whisper-zh'
-print(f'Loading BELLE-zh from {path}...')
+print(f'Loading model from {path}...')
 m = WhisperModel(path, device='cuda', compute_type='float16')
 print('  loaded')
 

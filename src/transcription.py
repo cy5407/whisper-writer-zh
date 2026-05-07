@@ -1,10 +1,22 @@
 import io
 import os
+import sys
 import numpy as np
 import soundfile as sf
 from faster_whisper import WhisperModel
 from openai import OpenAI
-from opencc import OpenCC
+
+try:
+    from opencc import OpenCC
+except ImportError:
+    print(
+        '[whisper-writer-zh] Required dependency missing: opencc-python-reimplemented\n'
+        '  Whisper outputs Simplified Chinese by default; this fork relies on OpenCC\n'
+        '  to convert to Traditional. Install with:\n'
+        '      pip install opencc-python-reimplemented',
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 from utils import ConfigManager
 
@@ -75,7 +87,10 @@ def _llm_polish(text):
 
     if not polished:
         return text
-    ConfigManager.console_print(f'[LLM polish] {text!r} -> {polished!r}')
+    if pp.get('debug_transcript_logging'):
+        ConfigManager.console_print(f'[LLM polish] {text!r} -> {polished!r}')
+    else:
+        ConfigManager.console_print(f'[LLM polish] {provider}/{model} ok ({len(text)} -> {len(polished)} chars)')
     return polished
 
 def create_local_model():

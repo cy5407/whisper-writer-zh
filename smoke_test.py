@@ -1,22 +1,8 @@
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-# Mirror run.py CUDA DLL setup
-try:
-    import nvidia.cublas.lib as _cublas
-    import nvidia.cudnn.lib as _cudnn
-    for mod in (_cublas, _cudnn):
-        mod_dir = os.path.dirname(mod.__file__)
-        bin_dir = os.path.join(os.path.dirname(mod_dir), 'bin')
-        for d in (bin_dir, mod_dir):
-            if os.path.isdir(d):
-                try:
-                    os.add_dll_directory(d)
-                except (AttributeError, OSError):
-                    pass
-                os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
-except ImportError:
-    pass
+from bootstrap_cuda import setup_cuda_dlls
+setup_cuda_dlls()
 
 from opencc import OpenCC
 cc = OpenCC('s2twp')

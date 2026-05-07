@@ -133,10 +133,13 @@ class SettingsWindow(BaseWindow):
         return widget
 
     def create_line_edit(self, value, key=None):
-        widget = QLineEdit(value)
+        widget = QLineEdit(value or '')
         if key == 'api_key':
             widget.setEchoMode(QLineEdit.Password)
-            widget.setText(os.getenv('OPENAI_API_KEY') or value)
+            widget.setText(os.getenv('OPENAI_API_KEY') or value or '')
+        elif key == 'anthropic_api_key':
+            widget.setEchoMode(QLineEdit.Password)
+            widget.setText(os.getenv('ANTHROPIC_API_KEY') or value or '')
         elif key == 'model_path':
             layout = QHBoxLayout()
             layout.addWidget(widget)
@@ -177,13 +180,45 @@ class SettingsWindow(BaseWindow):
         """Save the settings to the config file and .env file."""
         self.iterate_settings(self.save_setting)
 
-        # Save the API key to the .env file
+        # Reject save when LLM polish is on but the matching provider key is missing —
+        # otherwise the runtime silently falls back, hiding the misconfiguration.
+        pp = ConfigManager.get_config_section('post_processing')
+        if pp.get('llm_polish_enabled'):
+            provider = pp.get('llm_provider')
+            if provider == 'anthropic':
+                key = pp.get('anthropic_api_key') or os.getenv('ANTHROPIC_API_KEY')
+                if not key:
+                    QMessageBox.warning(
+                        self,
+                        tr('Missing API Key'),
+                        tr('LLM polish is enabled with provider=anthropic but ANTHROPIC_API_KEY is empty. '
+                           'Set the key or disable LLM polish before saving.'),
+                    )
+                    return
+            elif provider == 'openai':
+                key = (ConfigManager.get_config_value('model_options', 'api', 'api_key')
+                       or os.getenv('OPENAI_API_KEY'))
+                if not key:
+                    QMessageBox.warning(
+                        self,
+                        tr('Missing API Key'),
+                        tr('LLM polish is enabled with provider=openai but OPENAI_API_KEY is empty. '
+                           'Set the key or disable LLM polish before saving.'),
+                    )
+                    return
+
+        # Save credentials to .env (never persist them to config.yaml).
         api_key = ConfigManager.get_config_value('model_options', 'api', 'api_key') or ''
         set_key('.env', 'OPENAI_API_KEY', api_key)
         os.environ['OPENAI_API_KEY'] = api_key
 
-        # Remove the API key from the config
+        anthropic_api_key = ConfigManager.get_config_value('post_processing', 'anthropic_api_key') or ''
+        set_key('.env', 'ANTHROPIC_API_KEY', anthropic_api_key)
+        os.environ['ANTHROPIC_API_KEY'] = anthropic_api_key
+
+        # Remove credentials from the in-memory config before save_config writes config.yaml.
         ConfigManager.set_config_value(None, 'model_options', 'api', 'api_key')
+        ConfigManager.set_config_value(None, 'post_processing', 'anthropic_api_key')
 
         ConfigManager.save_config()
         QMessageBox.information(self, tr('Settings Saved'), tr('Settings have been saved. The application will now restart.'))
