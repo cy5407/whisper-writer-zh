@@ -130,3 +130,12 @@ dmypy.json
 
 # Configuration files
 config.yaml
+
+# Local Whisper model files (too large for GitHub)
+models/
+
+# Claude Code conversation exports
+conversation-*.txt
+
+# Runtime logs
+logs/

@@ -1,6 +1,49 @@
 import os
 import sys
 import time
+
+
+_dll_dir_handles = []
+_loaded_dlls = []
+
+
+def _setup_cuda_dlls():
+    if sys.platform != 'win32':
+        return
+    import ctypes
+    import glob
+    try:
+        import nvidia
+    except ImportError:
+        return
+    bin_dirs = []
+    for nvidia_root in nvidia.__path__:
+        bin_dirs.extend(sorted(glob.glob(os.path.join(nvidia_root, '*', 'bin'))))
+    for d in bin_dirs:
+        try:
+            _dll_dir_handles.append(os.add_dll_directory(d))
+        except (AttributeError, OSError):
+            pass
+        os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
+    seen = set()
+    for _ in range(4):
+        progress = False
+        for d in bin_dirs:
+            for dll_path in glob.glob(os.path.join(d, '*.dll')):
+                if dll_path in seen:
+                    continue
+                try:
+                    _loaded_dlls.append(ctypes.WinDLL(dll_path))
+                    seen.add(dll_path)
+                    progress = True
+                except OSError:
+                    pass
+        if not progress:
+            break
+
+
+_setup_cuda_dlls()
+
 from audioplayer import AudioPlayer
 from pynput.keyboard import Controller
 from PyQt5.QtCore import QObject, QProcess
@@ -15,14 +58,16 @@ from ui.status_window import StatusWindow
 from transcription import create_local_model
 from input_simulation import InputSimulator
 from utils import ConfigManager
+from i18n import tr
 
 
 class WhisperWriterApp(QObject):
-    def __init__(self):
+    def __init__(self, preloaded_model=None):
         """
         Initialize the application, opening settings window if no configuration file is found.
         """
         super().__init__()
+        self._preloaded_model = preloaded_model
         self.app = QApplication(sys.argv)
         self.app.setWindowIcon(QIcon(os.path.join('assets', 'ww-logo.png')))
 
@@ -50,7 +95,10 @@ class WhisperWriterApp(QObject):
 
         model_options = ConfigManager.get_config_section('model_options')
         model_path = model_options.get('local', {}).get('model_path')
-        self.local_model = create_local_model() if not model_options.get('use_api') else None
+        if model_options.get('use_api'):
+            self.local_model = None
+        else:
+            self.local_model = self._preloaded_model or create_local_model()
 
         self.result_thread = None
 
@@ -73,15 +121,15 @@ class WhisperWriterApp(QObject):
 
         tray_menu = QMenu()
 
-        show_action = QAction('WhisperWriter Main Menu', self.app)
+        show_action = QAction(tr('WhisperWriter Main Menu'), self.app)
         show_action.triggered.connect(self.main_window.show)
         tray_menu.addAction(show_action)
 
-        settings_action = QAction('Open Settings', self.app)
+        settings_action = QAction(tr('Open Settings'), self.app)
         settings_action.triggered.connect(self.settings_window.show)
         tray_menu.addAction(settings_action)
 
-        exit_action = QAction('Exit', self.app)
+        exit_action = QAction(tr('Exit'), self.app)
         exit_action.triggered.connect(self.exit_app)
         tray_menu.addAction(exit_action)
 
@@ -184,5 +232,14 @@ class WhisperWriterApp(QObject):
 
 
 if __name__ == '__main__':
-    app = WhisperWriterApp()
+    # Pre-load the Whisper model BEFORE PyQt5 / QApplication is constructed.
+    # PyQt5's bundled Qt5 DLLs conflict with ctranslate2/CUDA on Windows
+    # (Whisper init crashes with access violation if Qt is loaded first).
+    _preloaded = None
+    ConfigManager.initialize()
+    _model_options = ConfigManager.get_config_section('model_options')
+    if not _model_options.get('use_api'):
+        from transcription import create_local_model
+        _preloaded = create_local_model()
+    app = WhisperWriterApp(preloaded_model=_preloaded)
     app.run()

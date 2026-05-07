@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt, QCoreApplication, QProcess, pyqtSignal
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ui.base_window import BaseWindow
 from utils import ConfigManager
+from i18n import tr
 
 load_dotenv()
 
@@ -19,7 +20,7 @@ class SettingsWindow(BaseWindow):
 
     def __init__(self):
         """Initialize the settings window."""
-        super().__init__('Settings', 700, 700)
+        super().__init__(tr('Settings'), 700, 700)
         self.schema = ConfigManager.get_schema()
         self.init_settings_ui()
 
@@ -43,7 +44,7 @@ class SettingsWindow(BaseWindow):
             tab = QWidget()
             tab_layout = QVBoxLayout()
             tab.setLayout(tab_layout)
-            self.tabs.addTab(tab, category.replace('_', ' ').capitalize())
+            self.tabs.addTab(tab, tr(category.replace('_', ' ').capitalize()))
 
             self.create_settings_widgets(tab_layout, category, settings)
             tab_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
@@ -59,18 +60,18 @@ class SettingsWindow(BaseWindow):
 
     def create_buttons(self):
         """Create reset and save buttons."""
-        reset_button = QPushButton('Reset to saved settings')
+        reset_button = QPushButton(tr('Reset to saved settings'))
         reset_button.clicked.connect(self.reset_settings)
         self.main_layout.addWidget(reset_button)
 
-        save_button = QPushButton('Save')
+        save_button = QPushButton(tr('Save'))
         save_button.clicked.connect(self.save_settings)
         self.main_layout.addWidget(save_button)
 
     def add_setting_widget(self, layout, key, meta, category, sub_category=None):
         """Add a setting widget to the layout."""
         item_layout = QHBoxLayout()
-        label = QLabel(f"{key.replace('_', ' ').capitalize()}:")
+        label = QLabel(f"{tr(key.replace('_', ' ').capitalize())}:")
         label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         widget = self.create_widget_for_type(key, meta, category, sub_category)
@@ -139,7 +140,7 @@ class SettingsWindow(BaseWindow):
         elif key == 'model_path':
             layout = QHBoxLayout()
             layout.addWidget(widget)
-            browse_button = QPushButton('Browse')
+            browse_button = QPushButton(tr('Browse'))
             browse_button.clicked.connect(lambda: self.browse_model_path(widget))
             layout.addWidget(browse_button)
             layout.setContentsMargins(0, 0, 0, 0)
@@ -164,13 +165,13 @@ class SettingsWindow(BaseWindow):
         return ConfigManager.get_config_value(category, key) or meta['value']
 
     def browse_model_path(self, widget):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Whisper Model File", "", "Model Files (*.bin);;All Files (*)")
+        file_path, _ = QFileDialog.getOpenFileName(self, tr('Select Whisper Model File'), "", tr('Model Files (*.bin);;All Files (*)'))
         if file_path:
             widget.setText(file_path)
 
     def show_description(self, description):
         """Show a description dialog."""
-        QMessageBox.information(self, 'Description', description)
+        QMessageBox.information(self, tr('Description'), description)
 
     def save_settings(self):
         """Save the settings to the config file and .env file."""
@@ -185,7 +186,7 @@ class SettingsWindow(BaseWindow):
         ConfigManager.set_config_value(None, 'model_options', 'api', 'api_key')
 
         ConfigManager.save_config()
-        QMessageBox.information(self, 'Settings Saved', 'Settings have been saved. The application will now restart.')
+        QMessageBox.information(self, tr('Settings Saved'), tr('Settings have been saved. The application will now restart.'))
         self.settings_saved.emit()
         self.close()
 
@@ -285,8 +286,8 @@ class SettingsWindow(BaseWindow):
         """Confirm before closing the settings window without saving."""
         reply = QMessageBox.question(
             self,
-            'Close without saving?',
-            'Are you sure you want to close without saving?',
+            tr('Close without saving?'),
+            tr('Are you sure you want to close without saving?'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )

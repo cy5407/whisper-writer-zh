@@ -150,9 +150,35 @@ post_processing:
       - pynput
       - ydotool
       - dotool
+  llm_polish_enabled:
+    value: false
+    type: bool
+    description: "If true, send Whisper output through an LLM to fix homophones and punctuation. Requires API key in .env (ANTHROPIC_API_KEY for anthropic, OPENAI_API_KEY for openai)."
+  llm_provider:
+    value: anthropic
+    type: str
+    description: "LLM provider for post-correction."
+    options:
+      - anthropic
+      - openai
+  llm_model:
+    value: claude-haiku-4-5
+    type: str
+    description: "LLM model id. Anthropic: claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-6. OpenAI: gpt-4o-mini / gpt-4o."
+  llm_timeout:
+    value: 5.0
+    type: float
+    description: "Seconds to wait for LLM polish before falling back to raw Whisper output."
 
 # Miscellaneous settings
 misc:
+  language:
+    value: zh_TW
+    type: str
+    description: "UI language. Switch requires app restart (auto-restart triggers on save)."
+    options:
+      - en
+      - zh_TW
   print_to_terminal:
     value: true
     type: bool
