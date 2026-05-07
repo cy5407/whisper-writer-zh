@@ -122,17 +122,62 @@ class InputSimulator:
 
     @staticmethod
     def _send_ctrl_v_win32():
-        """Send Ctrl+V via Win32 keybd_event. Bypasses IME's character-level interception
-        because we're injecting raw scancode events at the keyboard driver layer."""
+        """Send Ctrl+V via SendInput with VK_LCONTROL.
+
+        Why not keybd_event(VK_CONTROL=0x11):
+            VK_CONTROL is the abstract code; Windows tracks modifier state by
+            VK_LCONTROL/VK_RCONTROL and many apps query GetAsyncKeyState(VK_LCONTROL)
+            specifically. Sending the abstract code can result in the V keypress
+            being seen without an associated Ctrl-down state, so paste doesn't fire.
+
+        SendInput is preferred over keybd_event:
+            - It's the modern (NT 5.0+) replacement for keybd_event
+            - All 4 events are queued atomically, reducing the race window where
+              a focus change or other input could split the modifier from the V key.
+        """
         import ctypes
-        VK_CONTROL = 0x11
+        from ctypes import wintypes
+
+        VK_LCONTROL = 0xA2
         VK_V = 0x56
+        INPUT_KEYBOARD = 1
         KEYEVENTF_KEYUP = 0x0002
-        user32 = ctypes.windll.user32
-        user32.keybd_event(VK_CONTROL, 0, 0, 0)
-        user32.keybd_event(VK_V, 0, 0, 0)
-        user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
-        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+
+        ULONG_PTR = ctypes.c_size_t
+
+        class KEYBDINPUT(ctypes.Structure):
+            _fields_ = [
+                ('wVk', wintypes.WORD),
+                ('wScan', wintypes.WORD),
+                ('dwFlags', wintypes.DWORD),
+                ('time', wintypes.DWORD),
+                ('dwExtraInfo', ULONG_PTR),
+            ]
+
+        class _INPUT_UNION(ctypes.Union):
+            _fields_ = [('ki', KEYBDINPUT)]
+
+        class INPUT(ctypes.Structure):
+            _anonymous_ = ('u',)
+            _fields_ = [('type', wintypes.DWORD), ('u', _INPUT_UNION)]
+
+        def make(vk, flags):
+            inp = INPUT()
+            inp.type = INPUT_KEYBOARD
+            inp.ki.wVk = vk
+            inp.ki.wScan = 0
+            inp.ki.dwFlags = flags
+            inp.ki.time = 0
+            inp.ki.dwExtraInfo = 0
+            return inp
+
+        events = (INPUT * 4)(
+            make(VK_LCONTROL, 0),
+            make(VK_V, 0),
+            make(VK_V, KEYEVENTF_KEYUP),
+            make(VK_LCONTROL, KEYEVENTF_KEYUP),
+        )
+        ctypes.windll.user32.SendInput(4, ctypes.byref(events), ctypes.sizeof(INPUT))
 
     def _typewrite_ydotool(self, text, interval):
         """
