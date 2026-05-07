@@ -88,26 +88,37 @@ class InputSimulator:
         Uses Win32 keybd_event for the Ctrl+V keystroke — pynput's simulated Ctrl+V
         was being eaten by the IME on Windows. Saves and restores existing text
         clipboard content; binary clipboard data (images/files) is lost."""
+        import sys
         import pyperclip
         from utils import ConfigManager
+        def log(msg):
+            ConfigManager.console_print(f'[clipboard] {msg}')
+            sys.stdout.flush()
+
+        log(f'enter, text len={len(text)} preview={text[:40]!r}')
         try:
             saved = pyperclip.paste()
+            log(f'saved old clipboard, len={len(saved)}')
         except Exception as e:
-            ConfigManager.console_print(f'[clipboard] save failed: {type(e).__name__}: {e}')
+            log(f'save failed: {type(e).__name__}: {e}')
             saved = None
         try:
             pyperclip.copy(text)
             time.sleep(0.1)
+            verify = pyperclip.paste()
+            log(f'after copy, clipboard len={len(verify)} match={verify == text}')
             self._send_ctrl_v_win32()
+            log('ctrl+v sent')
             time.sleep(0.2)
         except Exception as e:
-            ConfigManager.console_print(f'[clipboard] paste failed: {type(e).__name__}: {e}')
+            log(f'paste failed: {type(e).__name__}: {e}')
         finally:
             if saved is not None:
                 try:
                     pyperclip.copy(saved)
+                    log('restored old clipboard')
                 except Exception as e:
-                    ConfigManager.console_print(f'[clipboard] restore failed: {type(e).__name__}: {e}')
+                    log(f'restore failed: {type(e).__name__}: {e}')
 
     @staticmethod
     def _send_ctrl_v_win32():
