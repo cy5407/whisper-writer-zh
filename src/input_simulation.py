@@ -2,7 +2,7 @@ import subprocess
 import os
 import signal
 import time
-from pynput.keyboard import Controller as PynputController
+from pynput.keyboard import Controller as PynputController, Key as PynputKey
 
 from utils import ConfigManager
 
@@ -33,6 +33,8 @@ class InputSimulator:
 
         if self.input_method == 'pynput':
             self.keyboard = PynputController()
+        elif self.input_method == 'clipboard':
+            self.keyboard = PynputController()
         elif self.input_method == 'dotool':
             self._initialize_dotool()
 
@@ -61,6 +63,8 @@ class InputSimulator:
         interval = ConfigManager.get_config_value('post_processing', 'writing_key_press_delay')
         if self.input_method == 'pynput':
             self._typewrite_pynput(text, interval)
+        elif self.input_method == 'clipboard':
+            self._typewrite_clipboard(text)
         elif self.input_method == 'ydotool':
             self._typewrite_ydotool(text, interval)
         elif self.input_method == 'dotool':
@@ -78,6 +82,28 @@ class InputSimulator:
             self.keyboard.press(char)
             self.keyboard.release(char)
             time.sleep(interval)
+
+    def _typewrite_clipboard(self, text):
+        """Paste via clipboard + Ctrl+V to bypass IME interception (Bopomofo/Pinyin etc.).
+        Saves and restores existing text-clipboard content; binary clipboard data is lost."""
+        import pyperclip
+        try:
+            saved = pyperclip.paste()
+        except Exception:
+            saved = ''
+        try:
+            pyperclip.copy(text)
+            time.sleep(0.05)
+            self.keyboard.press(PynputKey.ctrl)
+            self.keyboard.press('v')
+            self.keyboard.release('v')
+            self.keyboard.release(PynputKey.ctrl)
+            time.sleep(0.1)
+        finally:
+            try:
+                pyperclip.copy(saved)
+            except Exception:
+                pass
 
     def _typewrite_ydotool(self, text, interval):
         """

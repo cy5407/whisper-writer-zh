@@ -66,6 +66,8 @@ _TRANSLATIONS = {
         'Add trailing space': '結尾加空白',
         'Remove capitalization': '全部轉小寫',
         'Input method': '輸入模擬方式',
+        'pynput': 'pynput（鍵盤模擬・會被注音輸入法攔截）',
+        'clipboard': 'clipboard（剪貼簿貼上・繞過輸入法）',
         'Print to terminal': '在終端機印出狀態',
         'Hide status window': '隱藏狀態視窗',
         'Noise on completion': '完成時播放提示音',
